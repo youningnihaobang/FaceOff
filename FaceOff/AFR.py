@@ -18,6 +18,7 @@ class Attack(object):
     def __init__(self, 
         input_img, 
         target_img, 
+        mask_img,
         seed=None, 
         optimizer='sgd', 
         lr = 1e-1, 
@@ -38,6 +39,9 @@ class Attack(object):
 
         target_img : PIL.Image
             Image to target the adversarial attack against.
+
+        masks : PIL.Image
+            Image to mask of target.
 
         seed : int, optional
             Sets custom seed for reproducability. Default is generated randomly.
@@ -83,7 +87,8 @@ class Attack(object):
         # Adversarial embedding init
         self.adversarial_emb = None
         # Face mask init
-        self.mask_tensor = self._create_mask(input_img)
+        # self.mask_tensor = self._create_mask(input_img)
+        self.mask_tensor=self._create_mask_from_Image(mask_img)
         # Reference tensor used to apply mask
         self.ref = self.mask_tensor
 
@@ -213,6 +218,34 @@ class Attack(object):
         """
         return t.where((reference_tensor == 0), image_tensor, mask_tensor).to(device)
 
+    def _create_mask_from_Image(self,mask_image):
+        """
+        Parameters
+            mask_image : PIL.Image
+                image of the mask of face
+        """
+        mask_array = np.array(mask_image)
+        mask_array = mask_array.astype(np.float32)
+
+        # Fill the mask in with the color grey
+        # C
+        for i in range(mask_array.shape[0]):
+            # C
+            for j in range(mask_array.shape[1]):
+                # C
+                for k in range(mask_array.shape[2]):
+                    # Combo BREAKER
+                    if mask_array[i][j][k] == 255.:
+                        mask_array[i][j][k] = 0.5
+                    else:
+                        mask_array[i][j][k] = 0
+
+        # Create the mask tensor and initialize gradient
+        mask_tensor = ToTensor()(mask_array).to(device)
+        mask_tensor.requires_grad_(True)
+
+        return mask_tensor
+        pass
 
     def _create_mask(self, face_image):
         """
@@ -357,10 +390,13 @@ def load_data(path_to_data):
     list : [PIL.Image]
         List of resized face images
     """
+
+
     img_files = [f for f in os.listdir(path_to_data) if re.search(r'.*\.(jpe?g|png)', f)]
     img_files_locs = [os.path.join(path_to_data, f) for f in img_files]
 
     image_list = []
+
 
     for loc in img_files_locs:
         image_list.append(detect_face(loc))
